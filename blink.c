@@ -26,7 +26,7 @@
 //#include "em_timer.h"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_timer.c"
 
-#define DUTY_CYCLE                  13		// for 30%
+#define DUTY_CYCLE                  20		// for 30%
 #define TIMER_TOP                   40
 #define TIMER_CHANNEL				0
 #define TIMER_NUMBER				TIMER0
