@@ -26,11 +26,14 @@
 //#include "em_timer.h"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_timer.c"
 
-#define DUTY_CYCLE                  20		// for 30%
-#define TIMER_TOP                   40
-#define TIMER_CHANNEL				0
-#define TIMER_NUMBER				TIMER0
-
+#define DUTY_CYCLE                  20
+#define FPWM	                    40000
+#define TIMER_TOP                   (uint32_t)((14000000/FPWM)-1)
+#define TIMBUF		                (uint32_t)((TIMER_TOP*DUTY_CYCLE)/100)
+#define TIMER_CHANNEL				2
+#define TIMER_NUMBER				TIMER1
+#define PWMLOCATION 				TIMER_ROUTE_LOCATION_LOC3
+#define CCchanel					TIMER_ROUTE_CC2PEN
 volatile uint32_t msTicks; /* counts 1ms timeTicks */
 
 void Delay(uint32_t dlyTicks);
@@ -68,10 +71,10 @@ int main(void)
 
   /* Initialize gpio pin */
   CMU_ClockEnable(cmuClock_GPIO, true);
-  GPIO_PinModeSet(gpioPortD, 1, gpioModePushPull, 0);
+  GPIO_PinModeSet(gpioPortB, 11 , gpioModePushPull, 0);
 
 
-  CMU_ClockEnable(cmuClock_TIMER0, true);
+  CMU_ClockEnable(cmuClock_TIMER1, true);
 
   // Create the timer count control object initializer
   TIMER_InitCC_TypeDef timerCCInit = TIMER_INITCC_DEFAULT;
@@ -81,18 +84,18 @@ int main(void)
   // Configure CC channel 0
   TIMER_InitCC(TIMER_NUMBER, TIMER_CHANNEL, &timerCCInit);
 
-  // Route CC0 to location 3 (PD1) and enable pin for cc0
-  TIMER_NUMBER->ROUTE |= (TIMER_ROUTE_CC0PEN | TIMER_ROUTE_LOCATION_LOC3);
+  // Route CCx to location x  and enable pin for ccx
+  TIMER_NUMBER->ROUTE |= (CCchanel | PWMLOCATION);
 
   // Set Top Value
   TIMER_TopSet(TIMER_NUMBER, TIMER_TOP);
 
   // Set the PWM duty cycle here
-  TIMER_CompareBufSet(TIMER_NUMBER, TIMER_CHANNEL, DUTY_CYCLE);
+  TIMER_CompareBufSet(TIMER_NUMBER, TIMER_CHANNEL, TIMBUF);
 
   // Create a timerInit object, based on the API default
   TIMER_Init_TypeDef timerInit = TIMER_INIT_DEFAULT;
-  timerInit.prescale = timerPrescale8;
+  timerInit.prescale = timerPrescale1;
   timerInit.debugRun = true;
 
   TIMER_Init(TIMER_NUMBER, &timerInit);
@@ -100,8 +103,7 @@ int main(void)
 
   while (1)
   {
-//	  GPIO_PinOutToggle(gpioPortD,1);
-//	  Delay(10);
+
   }
 }
 
