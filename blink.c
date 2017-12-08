@@ -26,10 +26,10 @@
 //#include "em_timer.h"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_timer.c"
 
-#define DUTY_CYCLE                  20
+//#define DUTY_CYCLE                  45
 #define FPWM	                    40000
 #define TIMER_TOP                   (uint32_t)((14000000/FPWM)-1)
-#define TIMBUF		                (uint32_t)((TIMER_TOP*DUTY_CYCLE)/100)
+//#define TIMBUF		                (uint32_t)((TIMER_TOP*DUTY_CYCLE)/100)
 #define TIMER_CHANNEL				2
 #define TIMER_NUMBER				TIMER1
 #define PWMLOCATION 				TIMER_ROUTE_LOCATION_LOC3
@@ -37,6 +37,10 @@
 volatile uint32_t msTicks; /* counts 1ms timeTicks */
 
 void Delay(uint32_t dlyTicks);
+
+uint8_t 	counter		= 0;
+uint32_t 	DUTY_CYCLE	= 10;
+uint32_t 	TIMBUF;
 
 /**************************************************************************//**
  * @brief SysTick_Handler
@@ -59,6 +63,12 @@ void Delay(uint32_t dlyTicks)
   while ((msTicks - curTicks) < dlyTicks) ;
 }
 
+void TIMER1_IRQHandler(void)
+{
+  TIMER_IntClear(TIMER_NUMBER, TIMER_IF_CC2);      // Clear overflow flag
+  counter++;                             // Increment counter
+}
+
 /**************************************************************************//**
  * @brief  Main function
  *****************************************************************************/
@@ -72,6 +82,7 @@ int main(void)
   /* Initialize gpio pin */
   CMU_ClockEnable(cmuClock_GPIO, true);
   GPIO_PinModeSet(gpioPortB, 11 , gpioModePushPull, 0);
+
 
 
   CMU_ClockEnable(cmuClock_TIMER1, true);
@@ -98,12 +109,28 @@ int main(void)
   timerInit.prescale = timerPrescale1;
   timerInit.debugRun = true;
 
+  TIMER_IntEnable(TIMER_NUMBER, TIMER_IF_CC2);
+  NVIC_EnableIRQ(TIMER1_IRQn);
+
   TIMER_Init(TIMER_NUMBER, &timerInit);
   TIMER_Enable(TIMER_NUMBER, true);
 
+
+
   while (1)
   {
+	    if(counter == 5)
+	    {
+	    	if(DUTY_CYCLE<100)
+	    	{
+		    	DUTY_CYCLE+=10;
+	    	}
+	    	TIMBUF=TIMER_TOP*DUTY_CYCLE;
+	    	TIMBUF=TIMBUF/100;
 
+	    	TIMER_CompareBufSet(TIMER_NUMBER, TIMER_CHANNEL, TIMBUF);
+	    	counter = 0;
+	    }
   }
 }
 
