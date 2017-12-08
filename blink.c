@@ -26,8 +26,8 @@
 //#include "em_timer.h"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_timer.c"
 
-#define DUTY_CYCLE                  6		// for 30%
-#define TIMER_TOP                   20
+#define DUTY_CYCLE                  13		// for 30%
+#define TIMER_TOP                   40
 #define TIMER_CHANNEL				0
 #define TIMER_NUMBER				TIMER0
 
@@ -64,7 +64,7 @@ int main(void)
   /* Chip errata */
   CHIP_Init();
 
-  CMU_ClockFreqGet(cmuClock_HFPER);
+  if (SysTick_Config(CMU_ClockFreqGet(cmuClock_HFPER) / 1000)) while (1) ;
 
   /* Initialize gpio pin */
   CMU_ClockEnable(cmuClock_GPIO, true);
@@ -82,7 +82,7 @@ int main(void)
   TIMER_InitCC(TIMER_NUMBER, TIMER_CHANNEL, &timerCCInit);
 
   // Route CC0 to location 3 (PD1) and enable pin for cc0
-  TIMER3->ROUTE |= (TIMER_ROUTE_CC0PEN | TIMER_ROUTE_LOCATION_LOC3);
+  TIMER_NUMBER->ROUTE |= (TIMER_ROUTE_CC0PEN | TIMER_ROUTE_LOCATION_LOC3);
 
   // Set Top Value
   TIMER_TopSet(TIMER_NUMBER, TIMER_TOP);
@@ -92,13 +92,16 @@ int main(void)
 
   // Create a timerInit object, based on the API default
   TIMER_Init_TypeDef timerInit = TIMER_INIT_DEFAULT;
-  timerInit.prescale = timerPrescale256;
+  timerInit.prescale = timerPrescale8;
   timerInit.debugRun = true;
 
   TIMER_Init(TIMER_NUMBER, &timerInit);
+  TIMER_Enable(TIMER_NUMBER, true);
 
   while (1)
   {
-
+//	  GPIO_PinOutToggle(gpioPortD,1);
+//	  Delay(10);
   }
 }
+
