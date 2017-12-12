@@ -23,8 +23,9 @@
 #include "bsp.h"
 #include "bsp_trace.h"
 #include "em_gpio.h"
-//#include "em_dac.h"
-//#include "em_acmp.h"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_int.c"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emdrv/gpiointerrupt/inc/gpiointerrupt.h"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emdrv/gpiointerrupt/src/gpiointerrupt.c"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_dac.c"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_acmp.c"
 
@@ -34,6 +35,22 @@ uint32_t 	DUTY_CYCLE	= 0;
 uint32_t 	TIMBUF;
 float 		voltage1=0, voltage0=0;
 volatile uint32_t msTicks; /* counts 1ms timeTicks */
+volatile uint8_t PB_0;
+volatile uint8_t PB_1;
+
+
+void gpioCallback(uint8_t pin)
+{
+  if (pin == 9)
+  {
+    PB_0=1;
+  }
+  else if (pin == 10)
+  {
+    PB_1=1;
+  }
+}
+
 
 void Delay(uint32_t dlyTicks);
 
@@ -105,6 +122,15 @@ int main(void)
   GPIO_PinModeSet(gpioPortB,9,gpioModeInputPull,1);
   GPIO_PinModeSet(gpioPortB,10,gpioModeInputPull,1);
 
+  GPIOINT_Init();
+
+  /* Register callbacks before setting up and enabling pin interrupt. */
+  GPIOINT_CallbackRegister(9, gpioCallback);
+  GPIOINT_CallbackRegister(10, gpioCallback);
+
+  /* Set falling edge interrupt for both ports */
+  GPIO_IntConfig(gpioPortB, 9, true, false, true);
+  GPIO_IntConfig(gpioPortB, 10, true, false, true);
   /* Initialize LED driver */
   BSP_LedsInit();
 
@@ -117,31 +143,21 @@ int main(void)
   while (1)
   {
 
-	    if( !(GPIO_PinInGet(gpioPortB, 9)) )
+	    if( PB_0 )
 		{
-	    	Delay(100);
-		    if( !(GPIO_PinInGet(gpioPortB, 9)) )
-		    {
-				voltage0+=0.1;
-				if(voltage0>1.25) voltage0=0;
-				DAC_Value = (uint32_t)((voltage0 * 4096) / 1.25);
-				DAC_ChannelOutputSet(DAC0,0,DAC_Value);
-	//			BSP_LedSet(1);
-	//			BSP_LedClear(0);
-		    }
+			voltage0+=0.1;
+			if(voltage0>1.25) voltage0=0;
+			DAC_Value = (uint32_t)((voltage0 * 4096) / 1.25);
+			DAC_ChannelOutputSet(DAC0,0,DAC_Value);
+			PB_0=0;
 	    }
-	    if( !(GPIO_PinInGet(gpioPortB, 10)) )
-		{
-	    	Delay(100);
-		    if( !(GPIO_PinInGet(gpioPortB, 10)) )
-		    {
-				voltage1+=0.1;
-				if(voltage1>1.25) voltage1=0;
-				DAC_Value = (uint32_t)((voltage1 * 4096) / 1.25);
-				DAC_ChannelOutputSet(DAC0,1,DAC_Value);
-	//			BSP_LedClear(1);
-	//			BSP_LedSet(0);
-		    }
+	    if( PB_1 )
+	    {
+			voltage1+=0.1;
+			if(voltage1>1.25) voltage1=0;
+			DAC_Value = (uint32_t)((voltage1 * 4096) / 1.25);
+			DAC_ChannelOutputSet(DAC0,1,DAC_Value);
+			PB_1=0;
 		}
 
 		if(ACMP0->STATUS & ACMP_STATUS_ACMPOUT)
