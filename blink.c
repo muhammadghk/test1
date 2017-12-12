@@ -51,6 +51,22 @@ void gpioCallback(uint8_t pin)
   }
 }
 
+void ACMP0_IRQHandler(void)
+{
+  /* Clear interrupt flag */
+  ACMP0->IFC = ACMP_IFC_EDGE;
+	if(ACMP0->STATUS & ACMP_STATUS_ACMPOUT)
+	{
+		BSP_LedSet(1);
+		BSP_LedClear(0);
+	}
+	else
+	{
+		BSP_LedClear(1);
+		BSP_LedSet(0);
+	}
+}
+
 
 void Delay(uint32_t dlyTicks);
 
@@ -78,10 +94,14 @@ void Delay(uint32_t dlyTicks)
  {
    ACMP_Init_TypeDef acmp_init    = ACMP_INIT_DEFAULT;
 
+   acmp_init.interruptOnFallingEdge = true;
+   acmp_init.interruptOnRisingEdge  = true;
+
    CMU_ClockEnable(cmuClock_ACMP0, true);
 
    ACMP_Init(ACMP0, &acmp_init);
    ACMP_ChannelSet(ACMP0, acmpChannelDAC0Ch1, acmpChannel6);
+   ACMP_IntEnable(ACMP0, ACMP_IEN_EDGE);
  }
 
  static void DACConfig(void)
@@ -140,6 +160,9 @@ int main(void)
   DAC_Enable(DAC0,0,1);
   DAC_Enable(DAC0,1,1);
 
+  NVIC_ClearPendingIRQ(ACMP0_IRQn);
+  NVIC_EnableIRQ(ACMP0_IRQn);
+
   while (1)
   {
 
@@ -160,16 +183,6 @@ int main(void)
 			PB_1=0;
 		}
 
-		if(ACMP0->STATUS & ACMP_STATUS_ACMPOUT)
-		{
-			BSP_LedSet(1);
-			BSP_LedClear(0);
-		}
-		else
-		{
-			BSP_LedClear(1);
-			BSP_LedSet(0);
-		}
 	}
 
 }
