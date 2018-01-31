@@ -23,36 +23,97 @@
 #include "bsp.h"
 #include "bsp_trace.h"
 #include "em_gpio.h"
+#include "em_msc.h"
+#include "em_lcd.h"
+#include "segmentlcd.h"
+//#include "em_timer.h"
 #include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_timer.c"
-#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_prs.c"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_msc.c"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/inc/em_msc.h"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emlib/src/em_int.c"
+#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/emdrv/gpiointerrupt/src/gpiointerrupt.c"
+#include "em_int.h"
 
-#define TOP 0xFFFF
+//#include "/home/taimoor/SimplicityStudio_v4/developer/sdks/exx32/v4.4.1/an/an0019_efm32_eeprom_emulation/eeprom_emulation.h"
 
-long count = 0, totalTime;
-char Capdone=0;
+//#define DUTY_CYCLE                  45
+#define FPWM	                    40000
+#define TIMER_TOP                   (uint32_t)((14000000/FPWM)-1)
+//#define TIMBUF		                (uint32_t)((TIMER_TOP*DUTY_CYCLE)/100)
+#define TIMER_CHANNEL				2
+#define TIMER_NUMBER				TIMER1
+#define PWMLOCATION 				TIMER_ROUTE_LOCATION_LOC3
+#define CCchanel					TIMER_ROUTE_CC2PEN
+volatile uint32_t msTicks; /* counts 1ms timeTicks */
 
-void TIMER0_IRQHandler(void)
+#define EM_MSC_RUN_FROM_FLASH
+
+void Delay(uint32_t dlyTicks);
+void moveInterruptVectorToRam(void);
+
+uint8_t 	counter		= 0;
+uint32_t 	DUTY_CYCLE	= 10;
+uint32_t 	TIMBUF;
+
+volatile uint8_t PB_0;
+volatile uint8_t PB_1;
+
+
+uint32_t Address;
+uint32_t *Data_Ptr;
+uint8_t str;
+
+#define PageSize	((uint32_t)0x00000800)
+#define PageAddress ((uint32_t)0x00004000)
+#define IDaddress 	((uint32_t)0x00004000)
+#define IDlenght  	((uint32_t)0x00000008)
+#define KEYaddress	((uint32_t)IDaddress+IDlenght)
+#define KEYlenght  	((uint32_t)0x00000008)
+#define reserved_areaAddress ((uint32_t)(PageAddress+IDlenght+KEYlenght))
+#define reserved_areaLenght (PageAddress+PageSize-IDlenght-IDlenght)
+const uint8_t __attribute__((at(IDaddress))) ID[]= {0x63,0x69,0x65,0x47,0x32,0x36,0x36,0x38};
+const uint8_t __attribute__((at(IDaddress))) KEY[]={0x20,0x42,0xA5,0x17,0x63,0x42,0x25,0x98};
+const uint8_t __attribute__((at(reserved_areaAddress))) reserved_area[reserved_areaLenght];
+
+uint8_t NewID []={0x31,0x31,0x33,0x33,0x65,0x75,0x85,0x95};
+uint8_t Newkey[]={0x61,0xEF,0xFD,0xCD,0xA4,0xA2,0xB3,0x01};
+/**************************************************************************//**
+ * @brief SysTick_Handler
+ * Interrupt Service Routine for system tick counter
+ *****************************************************************************/
+void SysTick_Handler(void)
 {
-  uint16_t intFlags = TIMER_IntGet(TIMER0);
-
-  TIMER_IntClear(TIMER0, TIMER_IF_OF | TIMER_IF_CC0);
-
-  if(intFlags & TIMER_IF_OF)
-  {
-    count += TOP;
-  }
-
-  if(intFlags & TIMER_IF_CC0)
-  {
-    totalTime = count + TIMER_CaptureGet(TIMER0, 0);
-
-    totalTime = totalTime / 14; // time in us
-
-    Capdone=1;
-    /* Clear counter */
-    count = 0;
-   }
+  msTicks++;       /* increment counter necessary in Delay()*/
 }
+
+/**************************************************************************//**
+ * @brief Delays number of msTick Systicks (typically 1 ms)
+ * @param dlyTicks Number of ticks to delay
+ *****************************************************************************/
+void Delay(uint32_t dlyTicks)
+{
+  uint32_t curTicks;
+
+  curTicks = msTicks;
+  while ((msTicks - curTicks) < dlyTicks) ;
+}
+
+void gpioCallback(uint8_t pin)
+{
+  if (pin == 9)
+  {
+    PB_0=1;
+  }
+  else if (pin == 10)
+  {
+    PB_1=1;
+  }
+}
+//void TIMER1_IRQHandler(void)
+//{
+//  TIMER_IntClear(TIMER_NUMBER, TIMER_IF_CC2);      // Clear overflow flag
+//  counter++;                             // Increment counter
+//}
 
 /**************************************************************************//**
  * @brief  Main function
@@ -62,54 +123,108 @@ int main(void)
   /* Chip errata */
   CHIP_Init();
 
-  if (SysTick_Config(CMU_ClockFreqGet(cmuClock_HFPER) / 1000)) while (1) ;
+//  if (SysTick_Config(CMU_ClockFreqGet(cmuClock_HFPER) / 1000)) while (1) ;
 
-
+  /* Initialize gpio pin */
   CMU_ClockEnable(cmuClock_GPIO, true);
-  GPIO_PinModeSet(gpioPortB, 9, gpioModeInputPullFilter, 1);
-  GPIO_IntConfig(gpioPortB, 9, false, false, false);
+//  GPIO_PinModeSet(gpioPortB, 11 , gpioModePushPull, 0);
 
-  /* Enable PRS sense on GPIO and disable interrupt sense */
-  GPIO_InputSenseSet(GPIO_INSENSE_PRS, _GPIO_INSENSE_RESETVALUE);
+  CMU_ClockEnable(cmuClock_HFPER, true);
+  CMU_ClockEnable(cmuClock_GPIO, true);
+  GPIO_PinModeSet(gpioPortB,9,gpioModeInputPull,1);
+  GPIO_PinModeSet(gpioPortB,10,gpioModeInputPull,1);
 
-  CMU_ClockEnable(cmuClock_PRS, true);
+  GPIOINT_Init();
 
-  PRS_SourceSignalSet(0, PRS_CH_CTRL_SOURCESEL_GPIOH, PRS_CH_CTRL_SIGSEL_GPIOPIN9, prsEdgeOff);
+  /* Register callbacks before setting up and enabling pin interrupt. */
+  GPIOINT_CallbackRegister(9, gpioCallback);
+  GPIOINT_CallbackRegister(10, gpioCallback);
 
+  /* Set falling edge interrupt for both ports */
+  GPIO_IntConfig(gpioPortB, 9, true, false, true);
+  GPIO_IntConfig(gpioPortB, 10, true, false, true);
 
-  /* timer init*/
-  CMU_ClockEnable(cmuClock_TIMER0, true);
-
-  TIMER_InitCC_TypeDef timerCCInit = TIMER_INITCC_DEFAULT;
-  timerCCInit.prsSel     = timerPRSSELCh0,
-  timerCCInit.mode       = timerCCModeCapture,
-  timerCCInit.filter     = true,
-  timerCCInit.prsInput   = true,
-  TIMER_InitCC(TIMER0, 0, &timerCCInit);
-
-  TIMER_Init_TypeDef timerInit = TIMER_INIT_DEFAULT;
-  timerInit.enable     = false,
-  timerInit.debugRun   = true,
-  timerInit.prescale   = timerPrescale1,
-  timerInit.clkSel     = timerClkSelHFPerClk,
-  timerInit.fallAction = timerInputActionReloadStart,
-  timerInit.riseAction = timerInputActionStop,
-  timerInit .mode      = timerModeUp,
-  TIMER_Init(TIMER0, &timerInit);
+  str=ID[0];
+  str=KEY[0];
+  str=reserved_area[0];
 
 
-  TIMER_IntEnable(TIMER0, TIMER_IF_OF | TIMER_IF_CC0);
-  NVIC_EnableIRQ(TIMER0_IRQn);
-
+//  CMU_ClockEnable(cmuClock_TIMER1, true);
+//
+//  EFM_ASSERT(CMU->HFPERCLKDIV & _CMU_HFPERCLKEN0_MASK);
+//  // Create the timer count control object initializer
+//  TIMER_InitCC_TypeDef timerCCInit = TIMER_INITCC_DEFAULT;
+//  timerCCInit.mode = timerCCModePWM;
+//  timerCCInit.cmoa = timerOutputActionToggle;
+//
+//  // Configure CC channel 0
+//  TIMER_InitCC(TIMER_NUMBER, TIMER_CHANNEL, &timerCCInit);
+//
+//  // Route CCx to location x  and enable pin for ccx
+//  TIMER_NUMBER->ROUTE |= (CCchanel | PWMLOCATION);
+//
+//  // Set Top Value
+//  TIMER_TopSet(TIMER_NUMBER, TIMER_TOP);
+//
+//  // Set the PWM duty cycle here
+//  TIMER_CompareBufSet(TIMER_NUMBER, TIMER_CHANNEL, TIMBUF);
+//
+//  // Create a timerInit object, based on the API default
+//  TIMER_Init_TypeDef timerInit = TIMER_INIT_DEFAULT;
+//  timerInit.prescale = timerPrescale1;
+//  timerInit.debugRun = true;
+//
+//  TIMER_IntEnable(TIMER_NUMBER, TIMER_IF_CC2);
+//  NVIC_EnableIRQ(TIMER1_IRQn);
+//
+//  TIMER_Init(TIMER_NUMBER, &timerInit);
+//  TIMER_Enable(TIMER_NUMBER, true);
 
   while (1)
   {
-	  if(Capdone)
-	  {
-		  Capdone=0;
-	  }
-	  EMU_EnterEM1();
+//	    if(counter == 5)
+//	    {
+//	    	if(DUTY_CYCLE<100)
+//	    	{
+//		    	DUTY_CYCLE+=10;
+//	    	}
+//	    	TIMBUF=TIMER_TOP*DUTY_CYCLE;
+//	    	TIMBUF=TIMBUF/100;
+//
+//	    	TIMER_CompareBufSet(TIMER_NUMBER, TIMER_CHANNEL, TIMBUF);
+//	    	counter = 0;
+//	    }
+	    if( PB_0  )
+		{
+	    	/* Enables the flash controller for writing. */
+	    	MSC_Init();
 
+	    	/* Erase the FLASH pages */
+	    	MSC_ErasePage(PageAddress);
+
+	    	/* Program Flash Bank1 */
+	    	Address  = IDaddress;
+	    	Data_Ptr = (uint32_t *)NewID;
+	    	MSC_Init();
+
+	    	while(Address < (IDaddress+IDlenght))
+	    	  {
+	    	    MSC_WriteWord(Address, (void *)Data_Ptr,4);
+	    	    Address = Address +4;
+	    	    Data_Ptr = Data_Ptr ++;
+	    	  }
+	    	Address  = KEYaddress;
+	    	Data_Ptr = (uint32_t *)Newkey;
+
+	    	while(Address < (KEYaddress+KEYlenght))
+	    	  {
+	    	    MSC_WriteWord(Address, (void *)Data_Ptr,4);
+	    	    Address = Address +4;
+	    	    Data_Ptr = Data_Ptr ++;
+	    	  }
+	    		MSC_Deinit();
+	    		PB_0=0;
+	    }
   }
 }
 
